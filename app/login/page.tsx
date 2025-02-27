@@ -45,7 +45,7 @@ export default function LoginPage() {
       setLoading(false);
       if (res.ok) {
         localStorage.setItem("token", data.token);
-        router.push("/"); // Redirect to app page
+        router.push("/profile"); // Redirect to profile page
       } else {
         setMessage({ type: "error", text: data.error });
       }
@@ -80,6 +80,7 @@ export default function LoginPage() {
       const data = await res.json();
       setLoading(false);
       if (res.ok) {
+        localStorage.setItem("token", data.token);
         setMessage({ type: "success", text: "User successfully registered!" });
         setTimeout(() => setActiveTab("login"), 2000);
       } else {

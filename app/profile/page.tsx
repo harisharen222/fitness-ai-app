@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -24,6 +24,26 @@ import Header from "@/components/header"
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState("overview")
+  const [username, setUsername] = useState("")
+
+  useEffect(() => {
+    // Fetch user details from the backend
+    const fetchUserDetails = async () => {
+      const token = localStorage.getItem("token")
+      if (token) {
+        const res = await fetch("/api/auth/me", {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        })
+        const data = await res.json()
+        if (res.ok) {
+          setUsername(data.username)
+        }
+      }
+    }
+    fetchUserDetails()
+  }, [])
 
   return (
     <div className="flex flex-col min-h-screen">
@@ -45,7 +65,7 @@ export default function ProfilePage() {
                 </div>
                 <div>
                   <div className="flex items-center gap-2">
-                    <h1 className="text-2xl font-bold">User Name</h1>
+                    <h1 className="text-2xl font-bold">{username}</h1>
                     <Badge>Intermediate</Badge>
                   </div>
                   <p className="text-muted-foreground">Joined January 2023 • 125 workouts completed</p>
