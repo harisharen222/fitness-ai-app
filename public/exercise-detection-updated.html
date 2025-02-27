@@ -97,6 +97,94 @@
             max-height: 150px;
             overflow-y: auto;
         }
+        .user-info {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e8f5e9;
+            border-radius: 10px;
+            width: 640px;
+        }
+        .xp-bar {
+            width: 100%;
+            height: 20px;
+            background-color: #ddd;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+        }
+        .xp-progress {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.5s ease-in-out;
+            border-radius: 10px;
+        }
+        .xp-text {
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        .level-display {
+            font-size: 36px;
+            font-weight: bold;
+            color: #2E7D32;
+            margin: 10px 0;
+        }
+        .milestone {
+            margin: 15px 0;
+            padding: 10px;
+            background-color: #fff9c4;
+            border-radius: 5px;
+            font-weight: bold;
+            display: none;
+        }
+        .arm-selector {
+            margin: 15px 0;
+        }
+        .leaderboard-export {
+            margin-top: 20px;
+            padding: 15px;
+            background-color: #e3f2fd;
+            border-radius: 10px;
+            width: 640px;
+        }
+        .feedback-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        .correct-form {
+            background-color: rgba(76, 175, 80, 0.3);
+        }
+        .incorrect-form {
+            background-color: rgba(244, 67, 54, 0.3);
+        }
+        .achievement {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background-color: #3f51b5;
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            transform: translateX(200%);
+            transition: transform 0.5s ease-out;
+            z-index: 1000;
+        }
+        .show-achievement {
+            transform: translateX(0);
+        }
     </style>
 </head>
 <body>
@@ -107,25 +195,53 @@
             <p>Loading TensorFlow.js...</p>
         </div>
         
+        <div class="user-info">
+            <input type="text" id="usernameInput" placeholder="Enter your username" style="padding: 8px; width: 200px; margin-right: 10px;">
+            <button id="setUsernameBtn">Set Username</button>
+            
+            <div class="level-display">
+                Level <span id="levelDisplay">1</span>
+            </div>
+            
+            <div class="xp-text">XP: <span id="xpDisplay">0</span> / <span id="xpNextLevel">100</span></div>
+            <div class="xp-bar">
+                <div class="xp-progress" id="xpProgress"></div>
+            </div>
+            
+            <div class="milestone" id="milestone">
+                Achievement Unlocked!
+            </div>
+        </div>
+        
         <div class="model-selector">
-            <label for="modelSelect">Select Exercise Detection Model:</label>
+            <label for="modelSelect">Select Exercise Type:</label>
             <select id="modelSelect">
                 <option value="squat">Squat Detection</option>
                 <option value="pushup">Push-up Detection</option>
-                <option value="jumping">Jumping Jack Detection</option>
                 <option value="bicep">Bicep Curl Detection</option>
             </select>
+            
+            <div class="arm-selector" id="armSelector" style="display: none;">
+                <label for="armSelect">Select Arm:</label>
+                <select id="armSelect">
+                    <option value="right">Right Arm</option>
+                    <option value="left">Left Arm</option>
+                    <option value="both">Both Arms</option>
+                </select>
+            </div>
         </div>
         
         <div class="video-container">
             <video id="webcam" autoplay playsinline></video>
             <canvas id="output"></canvas>
+            <div class="feedback-overlay" id="feedbackOverlay"></div>
         </div>
         
         <div class="controls">
             <button id="startBtn">Start Camera</button>
             <button id="detectBtn" disabled>Detect Exercise</button>
             <button id="stopBtn" disabled>Stop</button>
+            <button id="resetBtn" disabled>Reset Counter</button>
         </div>
         
         <div class="results">
@@ -138,9 +254,24 @@
                 <p>Repetition count:</p>
                 <div class="rep-counter" id="repCount">0</div>
             </div>
+            <div id="formFeedback"></div>
             <div id="confidenceDisplay"></div>
             <div class="debug-info" id="debugInfo"></div>
         </div>
+        
+        <div class="leaderboard-export">
+            <h3>Leaderboard Data</h3>
+            <p>Username: <span id="leaderboardUsername">Not set</span></p>
+            <p>Total XP: <span id="leaderboardXP">0</span></p>
+            <p>Level: <span id="leaderboardLevel">1</span></p>
+            <p>Exercises Completed Today: <span id="exercisesToday">0</span></p>
+            <button id="exportDataBtn">Export Leaderboard Data</button>
+        </div>
+    </div>
+    
+    <div class="achievement" id="achievementNotification">
+        <div class="achievement-title">Achievement Unlocked!</div>
+        <div class="achievement-text" id="achievementText"></div>
     </div>
 
     <!-- Load TensorFlow.js -->
@@ -160,12 +291,46 @@
             animationId: null,
             currentExercise: "None",
             selectedExerciseType: "squat",
+            selectedArm: "right",
             reps: 0,
             lastPoseState: "unknown",
             poseHistory: [],
             confidenceThreshold: 0.25,
-            debugMode: true  // Enable debug mode to help troubleshoot
+            debugMode: true,  // Enable debug mode to help troubleshoot
+            
+            // XP System
+            username: "Anonymous",
+            xp: 0,
+            level: 1,
+            exercisesToday: 0,
+            achievements: [],
+            
+            // Form quality tracking
+            formQuality: {
+                good: 0,
+                poor: 0
+            },
+            formFeedback: "",
+            streakCount: 0,
+            lastRepTimestamp: 0
         };
+
+        // XP constants
+        const XP_PER_REP = 10;
+        const XP_FORM_BONUS = 5;
+        const XP_STREAK_BONUS = 2;  // Multiplier for consecutive reps
+        const XP_PER_LEVEL = 100;   // Base XP needed per level (increases with level)
+        
+        // Achievement definitions
+        const achievements = [
+            { id: "first_rep", name: "First Step", description: "Complete your first rep", xpReward: 25, triggered: false },
+            { id: "level_up", name: "Level Up!", description: "Reach level 2", xpReward: 50, triggered: false },
+            { id: "rep_10", name: "Dedicated", description: "Complete 10 reps in one session", xpReward: 100, triggered: false },
+            { id: "rep_25", name: "Committed", description: "Complete 25 reps in one session", xpReward: 250, triggered: false },
+            { id: "perfect_form", name: "Perfect Form", description: "Complete 5 reps with perfect form", xpReward: 150, triggered: false },
+            { id: "exercise_variety", name: "Variety Pack", description: "Try all exercise types", xpReward: 200, triggered: false },
+            { id: "streak_5", name: "On Fire!", description: "Complete 5 reps in quick succession", xpReward: 75, triggered: false }
+        ];
 
         // DOM elements
         const elements = {
@@ -174,13 +339,38 @@
             startBtn: document.getElementById('startBtn'),
             detectBtn: document.getElementById('detectBtn'),
             stopBtn: document.getElementById('stopBtn'),
+            resetBtn: document.getElementById('resetBtn'),
             loading: document.getElementById('loading'),
             exerciseStatus: document.getElementById('exerciseStatus'),
             detectedExercise: document.getElementById('detectedExercise'),
             repCount: document.getElementById('repCount'),
             modelSelect: document.getElementById('modelSelect'),
+            armSelector: document.getElementById('armSelector'),
+            armSelect: document.getElementById('armSelect'),
             confidenceDisplay: document.getElementById('confidenceDisplay'),
-            debugInfo: document.getElementById('debugInfo')
+            debugInfo: document.getElementById('debugInfo'),
+            feedbackOverlay: document.getElementById('feedbackOverlay'),
+            formFeedback: document.getElementById('formFeedback'),
+            
+            // XP and User elements
+            usernameInput: document.getElementById('usernameInput'),
+            setUsernameBtn: document.getElementById('setUsernameBtn'),
+            xpDisplay: document.getElementById('xpDisplay'),
+            xpNextLevel: document.getElementById('xpNextLevel'),
+            xpProgress: document.getElementById('xpProgress'),
+            levelDisplay: document.getElementById('levelDisplay'),
+            milestone: document.getElementById('milestone'),
+            
+            // Leaderboard elements
+            leaderboardUsername: document.getElementById('leaderboardUsername'),
+            leaderboardXP: document.getElementById('leaderboardXP'),
+            leaderboardLevel: document.getElementById('leaderboardLevel'),
+            exercisesToday: document.getElementById('exercisesToday'),
+            exportDataBtn: document.getElementById('exportDataBtn'),
+            
+            // Achievement notification
+            achievementNotification: document.getElementById('achievementNotification'),
+            achievementText: document.getElementById('achievementText')
         };
         
         let ctx;
@@ -207,6 +397,9 @@
                 
                 // Set up event listeners
                 setupEventListeners();
+                
+                // Load user data from localStorage if available
+                loadUserData();
                 
                 elements.loading.style.display = "none";
             } catch (error) {
@@ -269,14 +462,47 @@
             // Stop detection button
             elements.stopBtn.addEventListener('click', stopDetection);
             
+            // Reset counter button
+            elements.resetBtn.addEventListener('click', resetCounter);
+            
             // Model selection
             elements.modelSelect.addEventListener('change', (e) => {
                 state.selectedExerciseType = e.target.value;
-                state.reps = 0;
-                elements.repCount.textContent = "0";
-                state.lastPoseState = "unknown";
+                
+                // Show/hide arm selector for bicep curls
+                if (state.selectedExerciseType === 'bicep') {
+                    elements.armSelector.style.display = 'block';
+                } else {
+                    elements.armSelector.style.display = 'none';
+                }
+                
+                resetCounter();
                 updateDebugInfo("Selected exercise type: " + state.selectedExerciseType);
+                
+                // Check for exercise variety achievement
+                checkExerciseVarietyAchievement();
             });
+            
+            // Arm selection for bicep curls
+            elements.armSelect.addEventListener('change', (e) => {
+                state.selectedArm = e.target.value;
+                resetCounter();
+                updateDebugInfo("Selected arm: " + state.selectedArm);
+            });
+            
+            // Username setting
+            elements.setUsernameBtn.addEventListener('click', () => {
+                const username = elements.usernameInput.value.trim();
+                if (username) {
+                    state.username = username;
+                    elements.leaderboardUsername.textContent = username;
+                    saveUserData();
+                    updateDebugInfo("Username set to: " + username);
+                }
+            });
+            
+            // Export leaderboard data
+            elements.exportDataBtn.addEventListener('click', exportLeaderboardData);
         }
 
         // Start the webcam
@@ -325,13 +551,8 @@
             state.isDetecting = true;
             elements.detectBtn.disabled = true;
             elements.stopBtn.disabled = false;
+            elements.resetBtn.disabled = false;
             elements.exerciseStatus.textContent = "Detecting...";
-            
-            // Reset counters
-            state.reps = 0;
-            elements.repCount.textContent = "0";
-            state.lastPoseState = "unknown";
-            state.poseHistory = [];
             
             updateDebugInfo("Starting detection for: " + state.selectedExerciseType);
             
@@ -354,6 +575,19 @@
             // Clear canvas
             ctx.clearRect(0, 0, elements.canvas.width, elements.canvas.height);
             updateDebugInfo("Detection stopped");
+        }
+        
+        // Reset rep counter
+        function resetCounter() {
+            state.reps = 0;
+            elements.repCount.textContent = "0";
+            state.lastPoseState = "unknown";
+            state.poseHistory = [];
+            state.formQuality = { good: 0, poor: 0 };
+            state.streakCount = 0;
+            state.formFeedback = "";
+            elements.formFeedback.textContent = "";
+            updateDebugInfo("Counter reset");
         }
 
         // Main detection loop
@@ -419,7 +653,7 @@
                     ctx.fillStyle = 'aqua';
                     ctx.fill();
                     
-                    // Always display keypoint names for better debugging
+                    // Display keypoint names for better debugging
                     ctx.fillStyle = 'white';
                     ctx.font = '10px Arial';
                     ctx.fillText(keypoint.name, keypoint.x + 7, keypoint.y - 3);
@@ -483,9 +717,6 @@
                 case 'pushup':
                     detectPushup(keypointMap);
                     break;
-                case 'jumping':
-                    detectJumpingJack(keypointMap);
-                    break;
                 case 'bicep':
                     detectBicepCurl(keypointMap);
                     break;
@@ -495,6 +726,9 @@
             
             // Update UI
             elements.detectedExercise.textContent = state.currentExercise;
+            
+            // Update form feedback
+            updateFormFeedback();
         }
 
         // Detect squats
@@ -505,6 +739,8 @@
             const rightKnee = keypoints['right_knee'];
             const leftAnkle = keypoints['left_ankle'];
             const rightAnkle = keypoints['right_ankle'];
+            const leftShoulder = keypoints['left_shoulder'];
+            const rightShoulder = keypoints['right_shoulder'];
             
             // Check if key points are detected with sufficient confidence
             if (
@@ -525,35 +761,56 @@
                     [(leftAnkle.x + rightAnkle.x) / 2, (leftAnkle.y + rightAnkle.y) / 2]
                 );
                 
-                // Display angle for debugging
+                // Calculate back angle (for form checking)
+                const backAngle = Math.abs(90 - calculateAngle(
+                    [(leftShoulder.x + rightShoulder.x) / 2, (leftShoulder.y + rightShoulder.y) / 2],
+                    [(leftHip.x + rightHip.x) / 2, (leftHip.y + rightHip.y) / 2],
+                    [(leftHip.x + rightHip.x) / 2, (leftHip.y + rightHip.y) / 2 - 100] // Vertical reference
+                ));
+                
+                // Display angles for debugging
                 ctx.fillStyle = 'white';
                 ctx.font = '12px Arial';
                 ctx.fillText(`Knee angle: ${kneeAngle.toFixed(1)}°`, 10, 30);
+                ctx.fillText(`Back angle: ${backAngle.toFixed(1)}°`, 10, 50);
                 
-                // Update debug info
-                updateDebugInfo(`Squat knee angle: ${kneeAngle.toFixed(1)}°`);
+                updateDebugInfo(`Squat knee angle: ${kneeAngle.toFixed(1)}°, back angle: ${backAngle.toFixed(1)}°`);
+                
+                // Check form quality
+                let formQuality = "good";
+                if (kneeAngle < 80) {
+                    // Knees too bent (could be bad for knees)
+                    formQuality = "poor";
+                    state.formFeedback = "Avoid going too low in your squat";
+                } else if (backAngle > 30) {
+                    // Back leaning forward too much
+                    formQuality = "poor";
+                    state.formFeedback = "Keep your back more upright";
+                } else {
+                    state.formFeedback = "Good form!";
+                }
                 
                 // Use knee angle for detection
+                // Use knee angle for detection
                 if (kneeAngle < 120) { // Person is in squat position
-                    if (state.lastPoseState === "standing") {
-                        // Transition from standing to squatting - count a rep
-                        state.reps++;
-                        elements.repCount.textContent = state.reps;
-                        updateDebugInfo("SQUAT REP COUNTED: " + state.reps);
+                        // Show feedback overlay
+                        showFeedbackOverlay(formQuality);
+                        
+                        if (state.lastPoseState === "standing") {
+                            // Transition from standing to squatting - count a rep
+                            countRep(formQuality);
+                        }
+                        state.lastPoseState = "squatting";
+                        state.currentExercise = "Squat";
+                    } else {
+                        // Person is in standing position
+                        elements.feedbackOverlay.style.opacity = "0";
+                        state.lastPoseState = "standing";
                     }
-                    state.lastPoseState = "squatting";
-                    state.currentExercise = "Squat (down position)";
-                } else if (kneeAngle > 160) { // Person is standing
-                    state.lastPoseState = "standing";
-                    state.currentExercise = "Squat (standing position)";
                 } else {
-                    state.currentExercise = "Squat (transitioning)";
+                    updateDebugInfo("Critical keypoints for squat detection are not visible");
                 }
-            } else {
-                state.currentExercise = "Squat (detecting...)";
-                updateDebugInfo("Missing required keypoints for squat detection");
             }
-        }
 
         // Detect push-ups
         function detectPushup(keypoints) {
@@ -563,7 +820,10 @@
             const rightElbow = keypoints['right_elbow'];
             const leftWrist = keypoints['left_wrist'];
             const rightWrist = keypoints['right_wrist'];
+            const leftHip = keypoints['left_hip'];
+            const rightHip = keypoints['right_hip'];
             
+            // Check if key points are detected with sufficient confidence
             if (
                 leftShoulder && rightShoulder && leftElbow && rightElbow && leftWrist && rightWrist &&
                 leftShoulder.score > state.confidenceThreshold && rightShoulder.score > state.confidenceThreshold &&
@@ -586,163 +846,463 @@
                 // Average elbow angle
                 const elbowAngle = (leftElbowAngle + rightElbowAngle) / 2;
                 
+                // Calculate body alignment (for form checking)
+                let bodyAlignment = 0;
+                if (leftHip && rightHip && 
+                    leftHip.score > state.confidenceThreshold && rightHip.score > state.confidenceThreshold) {
+                    // Check if body is straight (hips not sagging)
+                    const shoulderHeight = (leftShoulder.y + rightShoulder.y) / 2;
+                    const hipHeight = (leftHip.y + rightHip.y) / 2;
+                    // Normalized height difference (smaller is better)
+                    bodyAlignment = Math.abs(hipHeight - shoulderHeight) / elements.canvas.height;
+                }
+                
+                // Display angles for debugging
                 ctx.fillStyle = 'white';
                 ctx.font = '12px Arial';
                 ctx.fillText(`Elbow angle: ${elbowAngle.toFixed(1)}°`, 10, 30);
+                ctx.fillText(`Body alignment: ${(bodyAlignment * 100).toFixed(1)}%`, 10, 50);
                 
-                updateDebugInfo(`Pushup elbow angle: ${elbowAngle.toFixed(1)}°`);
+                updateDebugInfo(`Pushup elbow angle: ${elbowAngle.toFixed(1)}°, alignment: ${(bodyAlignment * 100).toFixed(1)}%`);
                 
-                if (elbowAngle < 90) { // Arms bent - down position
+                // Check form quality
+                let formQuality = "good";
+                if (bodyAlignment > 0.15) {
+                    // Hips sagging or raised too much
+                    formQuality = "poor";
+                    state.formFeedback = "Keep your body in a straight line";
+                } else if (elbowAngle < 70) {
+                    // Going too low
+                    formQuality = "poor";
+                    state.formFeedback = "Don't go too low, protect your shoulders";
+                } else {
+                    state.formFeedback = "Good form!";
+                }
+                
+                // Use elbow angle for detection
+                if (elbowAngle < 120) { // Arms bent - down position
+                    // Show feedback overlay
+                    showFeedbackOverlay(formQuality);
+                    
                     if (state.lastPoseState === "up") {
                         // Transition from up to down - count a rep
-                        state.reps++;
-                        elements.repCount.textContent = state.reps;
-                        updateDebugInfo("PUSHUP REP COUNTED: " + state.reps);
+                        countRep(formQuality);
                     }
                     state.lastPoseState = "down";
-                    state.currentExercise = "Push-up (down position)";
-                } else if (elbowAngle > 150) { // Arms straight - up position
+                    state.currentExercise = "Push-up";
+                } else {
+                    // Arms straight - up position
+                    elements.feedbackOverlay.style.opacity = "0";
                     state.lastPoseState = "up";
-                    state.currentExercise = "Push-up (up position)";
-                } else {
-                    state.currentExercise = "Push-up (transitioning)";
                 }
             } else {
-                state.currentExercise = "Push-up (detecting...)";
-                updateDebugInfo("Missing required keypoints for pushup detection");
+                updateDebugInfo("Critical keypoints for pushup detection are not visible");
             }
         }
 
-        // Detect jumping jacks
-        function detectJumpingJack(keypoints) {
-            const leftShoulder = keypoints['left_shoulder'];
-            const rightShoulder = keypoints['right_shoulder'];
-            const leftHip = keypoints['left_hip'];
-            const rightHip = keypoints['right_hip'];
-            const leftAnkle = keypoints['left_ankle'];
-            const rightAnkle = keypoints['right_ankle'];
-            
-            if (
-                leftShoulder && rightShoulder && leftHip && rightHip && leftAnkle && rightAnkle &&
-                leftShoulder.score > state.confidenceThreshold && rightShoulder.score > state.confidenceThreshold &&
-                leftHip.score > state.confidenceThreshold && rightHip.score > state.confidenceThreshold &&
-                leftAnkle.score > state.confidenceThreshold && rightAnkle.score > state.confidenceThreshold
-            ) {
-                // Calculate distances for jumping jack detection
-                const shoulderDistance = Math.sqrt(
-                    Math.pow(rightShoulder.x - leftShoulder.x, 2) + 
-                    Math.pow(rightShoulder.y - leftShoulder.y, 2)
-                );
-                
-                const ankleDistance = Math.sqrt(
-                    Math.pow(rightAnkle.x - leftAnkle.x, 2) + 
-                    Math.pow(rightAnkle.y - leftAnkle.y, 2)
-                );
-                
-                // Normalize by height (distance between shoulders and hips)
-                const torsoHeight = Math.sqrt(
-                    Math.pow((leftShoulder.x + rightShoulder.x)/2 - (leftHip.x + rightHip.x)/2, 2) + 
-                    Math.pow((leftShoulder.y + rightShoulder.y)/2 - (leftHip.y + rightHip.y)/2, 2)
-                );
-                
-                const normalizedShoulderDist = shoulderDistance / torsoHeight;
-                const normalizedAnkleDist = ankleDistance / torsoHeight;
-                
-                ctx.fillStyle = 'white';
-                ctx.font = '12px Arial';
-                ctx.fillText(`Shoulder dist: ${normalizedShoulderDist.toFixed(2)}`, 10, 30);
-                ctx.fillText(`Ankle dist: ${normalizedAnkleDist.toFixed(2)}`, 10, 50);
-                
-                updateDebugInfo(`Jumping Jack - Shoulder dist: ${normalizedShoulderDist.toFixed(2)}, Ankle dist: ${normalizedAnkleDist.toFixed(2)}`);
-                
-                if (normalizedShoulderDist > 1.5 && normalizedAnkleDist > 0.8) {
-                    // Arms and legs are spread
-                    if (state.lastPoseState === "closed") {
-                        // Transition from closed to open - count a rep
-                        state.reps++;
-                        elements.repCount.textContent = state.reps;
-                        updateDebugInfo("JUMPING JACK REP COUNTED: " + state.reps);
-                    }
-                    state.lastPoseState = "open";
-                    state.currentExercise = "Jumping Jack (open position)";
-                } else if (normalizedShoulderDist < 1.2 && normalizedAnkleDist < 0.5) {
-                    // Arms and legs are together
-                    state.lastPoseState = "closed";
-                    state.currentExercise = "Jumping Jack (closed position)";
-                } else {
-                    state.currentExercise = "Jumping Jack (transitioning)";
-                }
-            } else {
-                state.currentExercise = "Jumping Jack (detecting...)";
-                updateDebugInfo("Missing required keypoints for jumping jack detection");
-            }
-        }
-
-        // NEW: Detect bicep curls
+        // Detect bicep curls
         function detectBicepCurl(keypoints) {
-            // We'll focus on right arm for simplicity, could expand to track both
-            const rightShoulder = keypoints['right_shoulder'];
-            const rightElbow = keypoints['right_elbow'];
-            const rightWrist = keypoints['right_wrist'];
+            // Determine which arm to track based on selection
+            let shoulderPoint, elbowPoint, wristPoint;
+            let armSide = "";
             
+            if (state.selectedArm === 'right' || state.selectedArm === 'both') {
+                shoulderPoint = keypoints['right_shoulder'];
+                elbowPoint = keypoints['right_elbow'];
+                wristPoint = keypoints['right_wrist'];
+                armSide = "right";
+            } else {
+                shoulderPoint = keypoints['left_shoulder'];
+                elbowPoint = keypoints['left_elbow'];
+                wristPoint = keypoints['left_wrist'];
+                armSide = "left";
+            }
+            
+            // Check if key points are detected
             if (
-                rightShoulder && rightElbow && rightWrist &&
-                rightShoulder.score > state.confidenceThreshold && 
-                rightElbow.score > state.confidenceThreshold && 
-                rightWrist.score > state.confidenceThreshold
+                shoulderPoint && elbowPoint && wristPoint &&
+                shoulderPoint.score > state.confidenceThreshold && 
+                elbowPoint.score > state.confidenceThreshold && 
+                wristPoint.score > state.confidenceThreshold
             ) {
                 // Calculate elbow angle
                 const elbowAngle = calculateAngle(
-                    [rightShoulder.x, rightShoulder.y],
-                    [rightElbow.x, rightElbow.y],
-                    [rightWrist.x, rightWrist.y]
+                    [shoulderPoint.x, shoulderPoint.y],
+                    [elbowPoint.x, elbowPoint.y],
+                    [wristPoint.x, wristPoint.y]
                 );
                 
                 // Display angle for debugging
                 ctx.fillStyle = 'white';
                 ctx.font = '12px Arial';
-                ctx.fillText(`Bicep curl angle: ${elbowAngle.toFixed(1)}°`, 10, 30);
+                ctx.fillText(`${armSide} elbow angle: ${elbowAngle.toFixed(1)}°`, 10, 30);
                 
-                updateDebugInfo(`Bicep curl angle: ${elbowAngle.toFixed(1)}°`);
+                updateDebugInfo(`Bicep curl ${armSide} elbow angle: ${elbowAngle.toFixed(1)}°`);
                 
-                // Analyze the angle to determine bicep curl state
-                if (elbowAngle < 80) { // Arm is contracted (curl up position)
+                // Check form quality
+                let formQuality = "good";
+                // Check if elbow is stable (not moving forward/backward too much)
+                const shoulderX = shoulderPoint.x;
+                const elbowX = elbowPoint.x;
+                const elbowDeviation = Math.abs(elbowX - shoulderX) / elements.canvas.width;
+                
+                if (elbowDeviation > 0.15) {
+                    // Elbow moving too much
+                    formQuality = "poor";
+                    state.formFeedback = "Keep your elbow close to your body";
+                } else if (elbowAngle > 160) {
+                    // Extending arm too much
+                    formQuality = "poor";
+                    state.formFeedback = "Don't fully extend your arm, keep tension";
+                } else {
+                    state.formFeedback = "Good form!";
+                }
+                
+                // Use elbow angle for detection
+                if (elbowAngle < 90) { // Arm bent - up position
+                    // Show feedback overlay
+                    showFeedbackOverlay(formQuality);
+                    
                     if (state.lastPoseState === "down") {
                         // Transition from down to up - count a rep
-                        state.reps++;
-                        elements.repCount.textContent = state.reps;
-                        updateDebugInfo("BICEP CURL REP COUNTED: " + state.reps);
+                        countRep(formQuality);
                     }
                     state.lastPoseState = "up";
-                    state.currentExercise = "Bicep Curl (up position)";
-                } else if (elbowAngle > 150) { // Arm is extended (starting position)
+                    state.currentExercise = "Bicep Curl";
+                } else if (elbowAngle > 130) {
+                    // Arm extended - down position
+                    elements.feedbackOverlay.style.opacity = "0";
                     state.lastPoseState = "down";
-                    state.currentExercise = "Bicep Curl (down position)";
-                } else {
-                    state.currentExercise = "Bicep Curl (transitioning)";
+                }
+                
+                // If tracking both arms, check the other arm too
+                if (state.selectedArm === 'both') {
+                    const otherShoulder = keypoints['left_shoulder'];
+                    const otherElbow = keypoints['left_elbow'];
+                    const otherWrist = keypoints['left_wrist'];
+                    
+                    if (
+                        otherShoulder && otherElbow && otherWrist &&
+                        otherShoulder.score > state.confidenceThreshold && 
+                        otherElbow.score > state.confidenceThreshold && 
+                        otherWrist.score > state.confidenceThreshold
+                    ) {
+                        const otherElbowAngle = calculateAngle(
+                            [otherShoulder.x, otherShoulder.y],
+                            [otherElbow.x, otherElbow.y],
+                            [otherWrist.x, otherWrist.y]
+                        );
+                        
+                        updateDebugInfo(`Left elbow angle: ${otherElbowAngle.toFixed(1)}°`);
+                        
+                        // We'll count reps only from the right arm for simplicity
+                    }
                 }
             } else {
-                state.currentExercise = "Bicep Curl (detecting...)";
-                updateDebugInfo("Missing required keypoints for bicep curl detection");
+                updateDebugInfo("Critical keypoints for bicep curl detection are not visible");
             }
         }
 
-        // Calculate angle between three points
+        // Helper function to calculate angle between 3 points
         function calculateAngle(p1, p2, p3) {
-            const radians = Math.atan2(p3[1] - p2[1], p3[0] - p2[0]) - 
-                          Math.atan2(p1[1] - p2[1], p1[0] - p2[0]);
+            const [x1, y1] = p1;
+            const [x2, y2] = p2;
+            const [x3, y3] = p3;
             
-            let angle = Math.abs(radians * 180.0 / Math.PI);
+            // Calculate vectors
+            const v1x = x1 - x2;
+            const v1y = y1 - y2;
+            const v2x = x3 - x2;
+            const v2y = y3 - y2;
             
-            if (angle > 180.0) {
-                angle = 360.0 - angle;
-            }
+            // Calculate dot product
+            const dotProduct = v1x * v2x + v1y * v2y;
             
-            return angle;
+            // Calculate magnitudes
+            const v1Mag = Math.sqrt(v1x * v1x + v1y * v1y);
+            const v2Mag = Math.sqrt(v2x * v2x + v2y * v2y);
+            
+            // Calculate angle in radians
+            const angleRad = Math.acos(dotProduct / (v1Mag * v2Mag));
+            
+            // Convert to degrees
+            return angleRad * (180 / Math.PI);
         }
 
-        // Initialize the application when the page loads
-        window.addEventListener('load', init);
+        // Count a repetition
+        function countRep(formQuality) {
+            state.reps++;
+            elements.repCount.textContent = state.reps;
+            
+            // Record form quality
+            if (formQuality === "good") {
+                state.formQuality.good++;
+            } else {
+                state.formQuality.poor++;
+            }
+            
+            // Check for streak (reps in quick succession)
+            const now = Date.now();
+            if (now - state.lastRepTimestamp < 3000) { // Within 3 seconds
+                state.streakCount++;
+                
+                // Check for streak achievement
+                if (state.streakCount === 5) {
+                    unlockAchievement("streak_5");
+                }
+            } else {
+                state.streakCount = 1;
+            }
+            state.lastRepTimestamp = now;
+            
+            // Award XP
+            let xpEarned = XP_PER_REP;
+            
+            // Form quality bonus
+            if (formQuality === "good") {
+                xpEarned += XP_FORM_BONUS;
+            }
+            
+            // Streak bonus
+            if (state.streakCount > 1) {
+                xpEarned *= (1 + (state.streakCount * 0.1)); // 10% extra per rep in streak
+            }
+            
+            // Add XP
+            addXP(Math.round(xpEarned));
+            
+            // Check for achievements
+            if (state.reps === 1) {
+                unlockAchievement("first_rep");
+            } else if (state.reps === 10) {
+                unlockAchievement("rep_10");
+            } else if (state.reps === 25) {
+                unlockAchievement("rep_25");
+            }
+            
+            // Check for perfect form achievement
+            if (state.formQuality.good >= 5 && state.formQuality.poor === 0) {
+                unlockAchievement("perfect_form");
+            }
+            
+            updateDebugInfo(`Rep counted! Total: ${state.reps}, XP earned: ${xpEarned}`);
+            
+            // Increment exercises today counter
+            state.exercisesToday++;
+            elements.exercisesToday.textContent = state.exercisesToday;
+            
+            // Save user data
+            saveUserData();
+        }
+
+        // Add XP and check for level up
+        function addXP(amount) {
+            state.xp += amount;
+            
+            // Calculate XP required for next level
+            // Formula: base XP × level × 1.5 (increasing difficulty)
+            const xpForNextLevel = XP_PER_LEVEL * state.level * 1.5;
+            
+            // Check for level up
+            if (state.xp >= xpForNextLevel) {
+                state.level++;
+                
+                elements.levelDisplay.textContent = state.level;
+                showMilestone(`Level up! You are now level ${state.level}`);
+                
+                // Check for level up achievement
+                if (state.level === 2) {
+                    unlockAchievement("level_up");
+                }
+            }
+            
+            // Update XP display
+            elements.xpDisplay.textContent = state.xp;
+            elements.leaderboardXP.textContent = state.xp;
+            elements.leaderboardLevel.textContent = state.level;
+            
+            // Calculate progress percentage for XP bar
+            const progressPercentage = Math.min((state.xp / xpForNextLevel) * 100, 100);
+            elements.xpProgress.style.width = progressPercentage + "%";
+            
+            // Update XP required for next level
+            elements.xpNextLevel.textContent = Math.ceil(xpForNextLevel);
+        }
+
+        // Show milestone notification
+        function showMilestone(message) {
+            elements.milestone.textContent = message;
+            elements.milestone.style.display = "block";
+            
+            // Hide after 3 seconds
+            setTimeout(() => {
+                elements.milestone.style.display = "none";
+            }, 3000);
+        }
+
+        // Unlock achievement
+        function unlockAchievement(achievementId) {
+            const achievement = achievements.find(a => a.id === achievementId);
+            
+            if (achievement && !achievement.triggered) {
+                achievement.triggered = true;
+                
+                // Award XP bonus
+                addXP(achievement.xpReward);
+                
+                // Show achievement notification
+                elements.achievementText.textContent = `${achievement.name}: ${achievement.description}`;
+                elements.achievementNotification.classList.add("show-achievement");
+                
+                // Hide notification after 5 seconds
+                setTimeout(() => {
+                    elements.achievementNotification.classList.remove("show-achievement");
+                }, 5000);
+                
+                updateDebugInfo(`Achievement unlocked: ${achievement.name}`);
+                
+                // Save achievement
+                state.achievements.push(achievementId);
+                saveUserData();
+            }
+        }
+
+        // Check for exercise variety achievement
+        function checkExerciseVarietyAchievement() {
+            // Create a set of tried exercise types if it doesn't exist
+            if (!state.exercisesTried) {
+                state.exercisesTried = new Set();
+            }
+            
+            // Add current exercise type to set
+            state.exercisesTried.add(state.selectedExerciseType);
+            
+            // Check if all exercise types have been tried
+            if (state.exercisesTried.size >= 3) { // squat, pushup, bicep
+                unlockAchievement("exercise_variety");
+            }
+        }
+
+        // Show form feedback overlay
+        function showFeedbackOverlay(quality) {
+            const overlay = elements.feedbackOverlay;
+            
+            if (quality === "good") {
+                overlay.textContent = "✓";
+                overlay.className = "feedback-overlay correct-form";
+            } else {
+                overlay.textContent = "✗";
+                overlay.className = "feedback-overlay incorrect-form";
+            }
+            
+            overlay.style.opacity = "0.7";
+        }
+
+        // Update form feedback in UI
+        function updateFormFeedback() {
+            elements.formFeedback.textContent = state.formFeedback;
+        }
+
+        // Save user data to localStorage
+        function saveUserData() {
+            const userData = {
+                username: state.username,
+                xp: state.xp,
+                level: state.level,
+                exercisesToday: state.exercisesToday,
+                achievements: state.achievements,
+                exercisesTried: Array.from(state.exercisesTried || []),
+                lastSaved: new Date().toISOString()
+            };
+            
+            try {
+                localStorage.setItem('exerciseDetectionUserData', JSON.stringify(userData));
+                updateDebugInfo("User data saved to localStorage");
+            } catch (error) {
+                console.error("Error saving user data:", error);
+                updateDebugInfo("Error saving user data: " + error.message);
+            }
+        }
+
+        // Load user data from localStorage
+        function loadUserData() {
+            try {
+                const savedData = localStorage.getItem('exerciseDetectionUserData');
+                
+                if (savedData) {
+                    const userData = JSON.parse(savedData);
+                    
+                    // Check if data is from a different day, reset daily counters
+                    const lastSaved = new Date(userData.lastSaved);
+                    const today = new Date();
+                    const isSameDay = lastSaved.getDate() === today.getDate() && 
+                                     lastSaved.getMonth() === today.getMonth() && 
+                                     lastSaved.getFullYear() === today.getFullYear();
+                    
+                    if (!isSameDay) {
+                        userData.exercisesToday = 0;
+                    }
+                    
+                    // Update state with saved data
+                    state.username = userData.username || "Anonymous";
+                    state.xp = userData.xp || 0;
+                    state.level = userData.level || 1;
+                    state.exercisesToday = userData.exercisesToday || 0;
+                    state.achievements = userData.achievements || [];
+                    state.exercisesTried = new Set(userData.exercisesTried || []);
+                    
+                    // Update UI
+                    elements.usernameInput.value = state.username;
+                    elements.leaderboardUsername.textContent = state.username;
+                    elements.xpDisplay.textContent = state.xp;
+                    elements.leaderboardXP.textContent = state.xp;
+                    elements.levelDisplay.textContent = state.level;
+                    elements.leaderboardLevel.textContent = state.level;
+                    elements.exercisesToday.textContent = state.exercisesToday;
+                    
+                    // Calculate XP required for next level
+                    const xpForNextLevel = XP_PER_LEVEL * state.level * 1.5;
+                    elements.xpNextLevel.textContent = Math.ceil(xpForNextLevel);
+                    
+                    // Calculate progress percentage for XP bar
+                    const progressPercentage = Math.min((state.xp / xpForNextLevel) * 100, 100);
+                    elements.xpProgress.style.width = progressPercentage + "%";
+                    
+                    updateDebugInfo("User data loaded from localStorage");
+                }
+            } catch (error) {
+                console.error("Error loading user data:", error);
+                updateDebugInfo("Error loading user data: " + error.message);
+            }
+        }
+
+        // Export leaderboard data
+        function exportLeaderboardData() {
+            const data = {
+                username: state.username,
+                totalXP: state.xp,
+                level: state.level,
+                exercisesToday: state.exercisesToday,
+                achievements: state.achievements,
+                exportDate: new Date().toISOString()
+            };
+            
+            // Create a data URL for the JSON
+            const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(data, null, 2));
+            
+            // Create a download link
+            const downloadAnchorNode = document.createElement('a');
+            downloadAnchorNode.setAttribute("href", dataStr);
+            downloadAnchorNode.setAttribute("download", `fitness_data_${state.username}.json`);
+            document.body.appendChild(downloadAnchorNode);
+            downloadAnchorNode.click();
+            downloadAnchorNode.remove();
+            
+            updateDebugInfo("Leaderboard data exported");
+        }
+
+        // Initialize application on load
+        window.addEventListener('DOMContentLoaded', init);
     </script>
 </body>
 </html>
